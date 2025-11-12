@@ -14,6 +14,7 @@ import tempfile
 import shutil
 import logging
 from datetime import datetime
+from pydub import AudioSegment
 
 from transcriber import Transcriber
 from config import settings
@@ -60,6 +61,57 @@ def get_transcriber(model: str = settings.default_model) -> Transcriber:
         _current_model = model
 
     return _transcriber
+
+
+def convert_to_wav(input_path: Path, output_path: Path = None) -> Path:
+    """
+    Convert audio file to WAV format (16kHz, mono) required by ASR pipeline.
+
+    Args:
+        input_path: Path to input audio file (any format)
+        output_path: Optional output path. If None, creates a new temp file.
+
+    Returns:
+        Path to converted WAV file
+
+    Raises:
+        Exception: If conversion fails
+    """
+    try:
+        logger.info(f"Converting audio: {input_path.name} ({input_path.suffix})")
+
+        # Load audio in any format
+        audio = AudioSegment.from_file(str(input_path))
+
+        # Convert to mono
+        if audio.channels > 1:
+            logger.info(f"Converting from {audio.channels} channels to mono")
+            audio = audio.set_channels(1)
+
+        # Convert to 16kHz sample rate
+        if audio.frame_rate != 16000:
+            logger.info(f"Resampling from {audio.frame_rate}Hz to 16000Hz")
+            audio = audio.set_frame_rate(16000)
+
+        # Create output path if not provided
+        if output_path is None:
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+            output_path = Path(temp_file.name)
+            temp_file.close()
+
+        # Export as WAV
+        audio.export(
+            str(output_path),
+            format="wav",
+            parameters=["-acodec", "pcm_s16le"]  # 16-bit PCM
+        )
+
+        logger.info(f"Converted to WAV: {output_path} ({audio.duration_seconds:.1f}s)")
+        return output_path
+
+    except Exception as e:
+        logger.error(f"Audio conversion failed: {e}")
+        raise Exception(f"Failed to convert audio to WAV format: {str(e)}")
 
 
 async def save_upload_file(upload_file: UploadFile) -> Path:
@@ -189,18 +241,26 @@ async def transcribe_audio(
     Transcribe a single audio file.
 
     Args:
-        file: Audio file (WAV, FLAC, MP3, etc.)
+        file: Audio file (WAV, FLAC, MP3, WebM, etc.)
         model: Model name (e.g., 'ctc_1b', 'llm_1b')
         language: Language code (e.g., 'eng_Latn', 'english')
 
     Returns:
-        Transcription result
+        Transcription result with detailed timing breakdown
 
     Limitations:
         - Audio must be ≤40 seconds
         - Max file size: 50MB
+
+    Note:
+        Audio is automatically converted to WAV 16kHz mono for processing.
     """
     temp_path = None
+    wav_path = None
+
+    # Start timing
+    request_start = datetime.utcnow()
+    timings = {}
 
     try:
         # Validate model
@@ -211,22 +271,41 @@ async def transcribe_audio(
             )
 
         # Save uploaded file
+        upload_start = datetime.utcnow()
         temp_path = await save_upload_file(file)
+        upload_end = datetime.utcnow()
+        timings['upload_save'] = (upload_end - upload_start).total_seconds()
 
-        # Get transcriber
+        # Convert to WAV format (16kHz mono) required by ASR pipeline
+        logger.info(f"Converting {file.filename} to WAV format for transcription")
+        conversion_start = datetime.utcnow()
+        wav_path = convert_to_wav(temp_path)
+        conversion_end = datetime.utcnow()
+        timings['audio_conversion'] = (conversion_end - conversion_start).total_seconds()
+
+        # Get transcriber (may include model loading)
+        model_load_start = datetime.utcnow()
+        model_was_loaded = _transcriber is not None and _current_model == model
         transcriber = get_transcriber(model)
+        model_load_end = datetime.utcnow()
+        timings['model_load'] = (model_load_end - model_load_start).total_seconds()
+        timings['model_was_cached'] = model_was_loaded
 
         # Transcribe
         logger.info(f"Transcribing {file.filename} with model {model}")
-        start_time = datetime.utcnow()
+        transcription_start = datetime.utcnow()
 
         transcriptions = transcriber.transcribe(
-            [temp_path],
+            [wav_path],
             language=language
         )
 
-        end_time = datetime.utcnow()
-        duration = (end_time - start_time).total_seconds()
+        transcription_end = datetime.utcnow()
+        timings['transcription'] = (transcription_end - transcription_start).total_seconds()
+
+        # Calculate total time
+        request_end = datetime.utcnow()
+        timings['total'] = (request_end - request_start).total_seconds()
 
         return JSONResponse({
             "success": True,
@@ -235,8 +314,16 @@ async def transcribe_audio(
                 "filename": file.filename,
                 "model": model,
                 "language": language,
-                "processing_time": f"{duration:.2f}s",
-                "timestamp": end_time.isoformat()
+                "processing_time": f"{timings['total']:.2f}s",
+                "timestamp": request_end.isoformat()
+            },
+            "timings": {
+                "upload_and_save": f"{timings['upload_save']:.3f}s",
+                "audio_conversion": f"{timings['audio_conversion']:.3f}s",
+                "model_loading": f"{timings['model_load']:.3f}s",
+                "transcription": f"{timings['transcription']:.2f}s",
+                "total_backend": f"{timings['total']:.2f}s",
+                "model_was_cached": timings['model_was_cached']
             }
         })
 
@@ -247,13 +334,15 @@ async def transcribe_audio(
         raise HTTPException(status_code=500, detail=str(e))
 
     finally:
-        # Cleanup temp file
-        if temp_path and temp_path.exists() and settings.cleanup_uploads:
-            try:
-                temp_path.unlink()
-                logger.info(f"Cleaned up: {temp_path}")
-            except Exception as e:
-                logger.warning(f"Failed to cleanup {temp_path}: {e}")
+        # Cleanup temp files
+        if settings.cleanup_uploads:
+            for path in [temp_path, wav_path]:
+                if path and path.exists():
+                    try:
+                        path.unlink()
+                        logger.info(f"Cleaned up: {path}")
+                    except Exception as e:
+                        logger.warning(f"Failed to cleanup {path}: {e}")
 
 
 @app.post("/transcribe/batch")
@@ -267,15 +356,19 @@ async def transcribe_batch(
     Transcribe multiple audio files in batch.
 
     Args:
-        files: List of audio files
+        files: List of audio files (WAV, FLAC, MP3, WebM, etc.)
         model: Model name
         language: Language code
         batch_size: Processing batch size (1-10)
 
     Returns:
         List of transcription results
+
+    Note:
+        Audio files are automatically converted to WAV 16kHz mono for processing.
     """
     temp_paths = []
+    wav_paths = []
 
     try:
         # Validate
@@ -291,10 +384,16 @@ async def transcribe_batch(
                 detail=f"Batch size too large. Max: {settings.max_batch_size}"
             )
 
-        # Save all files
+        # Save and convert all files
+        logger.info(f"Processing {len(files)} files for batch transcription")
         for upload_file in files:
+            # Save uploaded file
             temp_path = await save_upload_file(upload_file)
             temp_paths.append(temp_path)
+
+            # Convert to WAV
+            wav_path = convert_to_wav(temp_path)
+            wav_paths.append(wav_path)
 
         # Get transcriber
         transcriber = get_transcriber(model)
@@ -304,7 +403,7 @@ async def transcribe_batch(
         start_time = datetime.utcnow()
 
         transcriptions = transcriber.transcribe(
-            temp_paths,
+            wav_paths,
             language=language,
             batch_size=batch_size
         )
@@ -343,13 +442,14 @@ async def transcribe_batch(
     finally:
         # Cleanup all temp files
         if settings.cleanup_uploads:
-            for temp_path in temp_paths:
-                if temp_path and temp_path.exists():
-                    try:
-                        temp_path.unlink()
-                        logger.info(f"Cleaned up: {temp_path}")
-                    except Exception as e:
-                        logger.warning(f"Failed to cleanup {temp_path}: {e}")
+            for path_list in [temp_paths, wav_paths]:
+                for path in path_list:
+                    if path and path.exists():
+                        try:
+                            path.unlink()
+                            logger.info(f"Cleaned up: {path}")
+                        except Exception as e:
+                            logger.warning(f"Failed to cleanup {path}: {e}")
 
 
 @app.get("/info")

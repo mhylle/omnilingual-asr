@@ -4,6 +4,7 @@ python-multipart>=0.0.6
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
 aiofiles>=23.0.0
+pydub>=0.25.1
 
 # Core dependencies (from requirements.txt)
 omnilingual-asr

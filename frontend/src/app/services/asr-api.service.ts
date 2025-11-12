@@ -12,6 +12,14 @@ export interface TranscriptionResponse {
     processing_time: string;
     timestamp: string;
   };
+  timings: {
+    upload_and_save: string;
+    audio_conversion: string;
+    model_loading: string;
+    transcription: string;
+    total_backend: string;
+    model_was_cached: boolean;
+  };
 }
 
 export interface HealthResponse {

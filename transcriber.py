@@ -35,6 +35,7 @@ class Transcriber:
         "german": "deu_Latn",
         "italian": "ita_Latn",
         "portuguese": "por_Latn",
+        "danish": "dan_Latn",
         "russian": "rus_Cyrl",
         "chinese": "cmn_Hans",
         "japanese": "jpn_Jpan",

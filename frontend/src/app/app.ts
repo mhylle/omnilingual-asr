@@ -21,6 +21,12 @@ export class App {
   readonly apiError = signal<string | null>(null);
   readonly selectedLanguage = signal<string>('english');
   readonly selectedModel = signal<string>('ctc_1b');
+  readonly lastProcessingTime = signal<string | null>(null);
+  readonly lastMetadata = signal<any>(null);
+  readonly lastTimings = signal<any>(null);
+  readonly uploadedFile = signal<File | null>(null);
+  readonly uploadedBlob = signal<Blob | null>(null);
+  readonly audioSource = signal<'recording' | 'upload' | null>(null);
 
   // Expose recorder state
   readonly isRecording = this.recorderService.isRecording;
@@ -30,7 +36,7 @@ export class App {
 
   // Computed values
   readonly canTranscribe = computed(() =>
-    !this.isRecording() && this.recorderService.audioBlob() !== null
+    !this.isRecording() && (this.recorderService.audioBlob() !== null || this.uploadedBlob() !== null)
   );
 
   readonly isProcessing = computed(() =>
@@ -57,6 +63,7 @@ export class App {
     { code: 'german', name: 'German' },
     { code: 'italian', name: 'Italian' },
     { code: 'portuguese', name: 'Portuguese' },
+    { code: 'danish', name: 'Danish' },
     { code: 'russian', name: 'Russian' },
     { code: 'chinese', name: 'Chinese (Simplified)' },
     { code: 'japanese', name: 'Japanese' },
@@ -78,10 +85,55 @@ export class App {
     try {
       this.transcription.set('');
       this.apiError.set(null);
+      this.clearUpload();
+      this.audioSource.set('recording');
       await this.recorderService.startRecording();
     } catch (err) {
       console.error('Failed to start recording:', err);
     }
+  }
+
+  onFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      const file = input.files[0];
+
+      // Validate file type
+      const validTypes = ['audio/wav', 'audio/mpeg', 'audio/mp3', 'audio/flac', 'audio/ogg', 'audio/webm', 'audio/m4a', 'audio/x-m4a'];
+      if (!validTypes.includes(file.type) && !file.name.match(/\.(wav|mp3|flac|ogg|webm|m4a)$/i)) {
+        this.apiError.set('Invalid file type. Please upload an audio file (WAV, MP3, FLAC, OGG, WebM, M4A).');
+        return;
+      }
+
+      // Validate file size (50MB limit)
+      const maxSize = 50 * 1024 * 1024; // 50MB
+      if (file.size > maxSize) {
+        this.apiError.set('File too large. Maximum size is 50MB.');
+        return;
+      }
+
+      this.uploadedFile.set(file);
+      this.uploadedBlob.set(file);
+      this.audioSource.set('upload');
+      this.transcription.set('');
+      this.apiError.set(null);
+      this.recorderService.reset();
+    }
+  }
+
+  clearUpload(): void {
+    this.uploadedFile.set(null);
+    this.uploadedBlob.set(null);
+    if (this.audioSource() === 'upload') {
+      this.audioSource.set(null);
+    }
+  }
+
+  switchToUpload(): void {
+    this.recorderService.reset();
+    this.audioSource.set('upload');
+    this.transcription.set('');
+    this.apiError.set(null);
   }
 
   stopRecording(): void {
@@ -97,7 +149,11 @@ export class App {
   }
 
   async transcribe(): Promise<void> {
-    const audioBlob = this.recorderService.audioBlob();
+    // Get audio from either recording or upload
+    const audioBlob = this.audioSource() === 'upload'
+      ? this.uploadedBlob()
+      : this.recorderService.audioBlob();
+
     if (!audioBlob) {
       return;
     }
@@ -105,16 +161,40 @@ export class App {
     this.isTranscribing.set(true);
     this.apiError.set(null);
     this.transcription.set('');
+    this.lastProcessingTime.set(null);
+    this.lastMetadata.set(null);
+    this.lastTimings.set(null);
+
+    // Track client-side timings
+    const clientTimings: any = {};
+    const totalStart = performance.now();
 
     try {
+      // Track upload time
+      const uploadStart = performance.now();
+
       const result = await this.apiService.transcribe(
         audioBlob,
         this.selectedModel(),
         this.selectedLanguage()
       ).toPromise();
 
+      const uploadEnd = performance.now();
+      clientTimings.network_upload = ((uploadEnd - uploadStart) / 1000).toFixed(3) + 's';
+
       if (result) {
+        const totalEnd = performance.now();
+        clientTimings.total_client = ((totalEnd - totalStart) / 1000).toFixed(3) + 's';
+
         this.transcription.set(result.transcription);
+        this.lastProcessingTime.set(result.metadata.processing_time);
+        this.lastMetadata.set(result.metadata);
+
+        // Combine client and server timings
+        this.lastTimings.set({
+          ...clientTimings,
+          ...result.timings
+        });
       }
     } catch (err: any) {
       console.error('Transcription failed:', err);
@@ -128,8 +208,13 @@ export class App {
 
   reset(): void {
     this.recorderService.reset();
+    this.clearUpload();
+    this.audioSource.set(null);
     this.transcription.set('');
     this.apiError.set(null);
+    this.lastProcessingTime.set(null);
+    this.lastMetadata.set(null);
+    this.lastTimings.set(null);
   }
 
   copyTranscription(): void {

@@ -8,73 +8,133 @@
     <!-- Recording Section -->
     <div class="recording-section">
       <div class="recorder-card">
-        <!-- Duration Display -->
-        <div class="duration-display"
-             [class.warning]="durationWarning()"
-             [class.critical]="durationCritical()">
-          <span class="duration-label">Duration:</span>
-          <span class="duration-time">{{ formattedDuration() }}</span>
-          @if (durationCritical()) {
-            <span class="duration-alert">⚠️ Stop recording! (40s limit)</span>
-          } @else if (durationWarning()) {
-            <span class="duration-warning">Approaching 40s limit</span>
-          }
+        <!-- Audio Source Tabs -->
+        <div class="source-tabs">
+          <button
+            class="source-tab"
+            [class.active]="audioSource() === 'recording' || audioSource() === null"
+            (click)="clearUpload()"
+            [disabled]="isProcessing()">
+            🎤 Record Audio
+          </button>
+          <button
+            class="source-tab"
+            [class.active]="audioSource() === 'upload'"
+            (click)="switchToUpload()"
+            [disabled]="isProcessing()">
+            📁 Upload File
+          </button>
         </div>
 
-        <!-- Recording Controls -->
-        <div class="controls">
-          @if (!isRecording()) {
-            <button
-              class="btn btn-primary btn-large"
-              (click)="startRecording()"
-              [disabled]="isProcessing()">
-              <span class="btn-icon">🎤</span>
-              Start Recording
-            </button>
-          } @else {
-            <div class="recording-controls">
-              @if (!isPaused()) {
-                <button
-                  class="btn btn-warning"
-                  (click)="pauseRecording()">
-                  <span class="btn-icon">⏸️</span>
-                  Pause
-                </button>
-              } @else {
-                <button
-                  class="btn btn-success"
-                  (click)="resumeRecording()">
-                  <span class="btn-icon">▶️</span>
-                  Resume
-                </button>
-              }
-
-              <button
-                class="btn btn-danger"
-                (click)="stopRecording()">
-                <span class="btn-icon">⏹️</span>
-                Stop
-              </button>
-            </div>
-          }
-        </div>
-
-        <!-- Recording Status -->
-        @if (isRecording()) {
-          <div class="recording-status">
-            <span class="recording-indicator"></span>
-            @if (isPaused()) {
-              <span>Recording Paused</span>
-            } @else {
-              <span>Recording...</span>
+        <!-- Recording Mode -->
+        @if (audioSource() !== 'upload') {
+          <!-- Duration Display -->
+          <div class="duration-display"
+               [class.warning]="durationWarning()"
+               [class.critical]="durationCritical()">
+            <span class="duration-label">Duration:</span>
+            <span class="duration-time">{{ formattedDuration() }}</span>
+            @if (durationCritical()) {
+              <span class="duration-alert">⚠️ Stop recording! (40s limit)</span>
+            } @else if (durationWarning()) {
+              <span class="duration-warning">Approaching 40s limit</span>
             }
           </div>
+
+          <!-- Recording Controls -->
+          <div class="controls">
+            @if (!isRecording()) {
+              <button
+                class="btn btn-primary btn-large"
+                (click)="startRecording()"
+                [disabled]="isProcessing()">
+                <span class="btn-icon">🎤</span>
+                Start Recording
+              </button>
+            } @else {
+              <div class="recording-controls">
+                @if (!isPaused()) {
+                  <button
+                    class="btn btn-warning"
+                    (click)="pauseRecording()">
+                    <span class="btn-icon">⏸️</span>
+                    Pause
+                  </button>
+                } @else {
+                  <button
+                    class="btn btn-success"
+                    (click)="resumeRecording()">
+                    <span class="btn-icon">▶️</span>
+                    Resume
+                  </button>
+                }
+
+                <button
+                  class="btn btn-danger"
+                  (click)="stopRecording()">
+                  <span class="btn-icon">⏹️</span>
+                  Stop
+                </button>
+              </div>
+            }
+          </div>
+
+          <!-- Recording Status -->
+          @if (isRecording()) {
+            <div class="recording-status">
+              <span class="recording-indicator"></span>
+              @if (isPaused()) {
+                <span>Recording Paused</span>
+              } @else {
+                <span>Recording...</span>
+              }
+            </div>
+          }
+
+          <!-- Error Display -->
+          @if (recordingError()) {
+            <div class="alert alert-error">
+              {{ recordingError() }}
+            </div>
+          }
         }
 
-        <!-- Error Display -->
-        @if (recordingError()) {
-          <div class="alert alert-error">
-            {{ recordingError() }}
+        <!-- Upload Mode -->
+        @if (audioSource() === 'upload') {
+          <div class="upload-section">
+            <label for="audioFile" class="upload-label">
+              <input
+                type="file"
+                id="audioFile"
+                class="upload-input"
+                accept="audio/*,.wav,.mp3,.flac,.ogg,.webm,.m4a"
+                (change)="onFileSelected($event)"
+                [disabled]="isProcessing()" />
+              <div class="upload-box" [class.has-file]="uploadedFile()">
+                @if (!uploadedFile()) {
+                  <div class="upload-placeholder">
+                    <span class="upload-icon">📁</span>
+                    <span class="upload-text">Click to upload audio file</span>
+                    <span class="upload-hint">WAV, MP3, FLAC, OGG, WebM, M4A (Max 50MB)</span>
+                  </div>
+                } @else {
+                  <div class="upload-file-info">
+                    <span class="file-icon">🎵</span>
+                    <div class="file-details">
+                      <span class="file-name">{{ uploadedFile()!.name }}</span>
+                      <span class="file-size">{{ (uploadedFile()!.size / 1024 / 1024).toFixed(2) }} MB</span>
+                    </div>
+                    <button
+                      class="btn-clear"
+                      type="button"
+                      (click)="clearUpload(); $event.stopPropagation()"
+                      [disabled]="isProcessing()">
+                      ✕
+                    </button>
+                  </div>
+                }
+              </div>
+            </label>
           </div>
         }
       </div>
@@ -112,7 +172,7 @@
         </div>
 
         <div class="info-box">
-          <p><strong>Note:</strong> Audio must be under 40 seconds. The recording will automatically warn you as you approach this limit.</p>
+          <p><strong>Note:</strong> You can either record audio (max 40 seconds) or upload an audio file (max 50MB). Supported formats: WAV, MP3, FLAC, OGG, WebM, M4A.</p>
         </div>
       </div>
     </div>
@@ -168,10 +228,81 @@
           <div class="transcription-text">
             {{ transcription() }}
           </div>
+
+          @if (lastMetadata()) {
+            <div class="metadata-info">
+              <h4 class="metadata-section-title">Settings Used</h4>
+              <div class="metadata-grid">
+                <div class="metadata-item">
+                  <span class="metadata-label">🤖 Model:</span>
+                  <span class="metadata-value">{{ lastMetadata().model }}</span>
+                </div>
+                @if (lastMetadata().language) {
+                  <div class="metadata-item">
+                    <span class="metadata-label">🌍 Language:</span>
+                    <span class="metadata-value">{{ lastMetadata().language }}</span>
+                  </div>
+                }
+                <div class="metadata-item">
+                  <span class="metadata-label">📁 Filename:</span>
+                  <span class="metadata-value">{{ lastMetadata().filename }}</span>
+                </div>
+              </div>
+            </div>
+          }
+
+          @if (lastTimings()) {
+            <div class="timings-info">
+              <h4 class="metadata-section-title">⏱️ Performance Breakdown</h4>
+
+              <div class="timings-section">
+                <h5 class="timings-subtitle">Client-Side (Browser)</h5>
+                <div class="timings-grid">
+                  <div class="timing-item">
+                    <span class="timing-label">📤 Network Upload:</span>
+                    <span class="timing-value">{{ lastTimings().network_upload }}</span>
+                  </div>
+                  <div class="timing-item timing-highlight">
+                    <span class="timing-label">🌐 Total Client Time:</span>
+                    <span class="timing-value">{{ lastTimings().total_client }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="timings-section">
+                <h5 class="timings-subtitle">Server-Side (Backend)</h5>
+                <div class="timings-grid">
+                  <div class="timing-item">
+                    <span class="timing-label">💾 Save Upload:</span>
+                    <span class="timing-value">{{ lastTimings().upload_and_save }}</span>
+                  </div>
+                  <div class="timing-item">
+                    <span class="timing-label">🎵 Audio Conversion:</span>
+                    <span class="timing-value">{{ lastTimings().audio_conversion }}</span>
+                  </div>
+                  <div class="timing-item">
+                    <span class="timing-label">🔧 Model Loading:</span>
+                    <span class="timing-value">{{ lastTimings().model_loading }}</span>
+                    @if (lastTimings().model_was_cached) {
+                      <span class="timing-badge">Cached ✓</span>
+                    }
+                  </div>
+                  <div class="timing-item">
+                    <span class="timing-label">🎤 Transcription:</span>
+                    <span class="timing-value">{{ lastTimings().transcription }}</span>
+                  </div>
+                  <div class="timing-item timing-highlight">
+                    <span class="timing-label">⚡ Total Backend:</span>
+                    <span class="timing-value">{{ lastTimings().total_backend }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          }
         </div>
       } @else if (!isTranscribing()) {
         <div class="placeholder-card">
-          <p>👆 Record audio and click "Transcribe" to see the result here</p>
+          <p>👆 Record or upload audio, then click "Transcribe" to see the result here</p>
         </div>
       }
     </div>

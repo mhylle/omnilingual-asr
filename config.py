@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # Processing Settings
     default_batch_size: int = 1
     max_batch_size: int = 10
-    allowed_audio_formats: list = [".wav", ".flac", ".mp3", ".ogg", ".m4a"]
+    allowed_audio_formats: list = [".wav", ".flac", ".mp3", ".ogg", ".m4a", ".webm"]
 
     # Upload Settings
     upload_dir: str = "./uploads"
