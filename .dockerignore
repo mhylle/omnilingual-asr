@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Project specific
+uploads/
+*.wav
+*.mp3
+*.flac
+recording.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+API_README.md
+example.py
+test_*.py
+
+# Scripts
+start_api.sh

@@ -1,0 +1,185 @@
+<div class="container">
+  <header class="header">
+    <h1>🎙️ {{ title() }}</h1>
+    <p class="subtitle">Speech Recognition in 1,600+ Languages</p>
+  </header>
+
+  <main class="main-content">
+    <!-- Recording Section -->
+    <div class="recording-section">
+      <div class="recorder-card">
+        <!-- Duration Display -->
+        <div class="duration-display"
+             [class.warning]="durationWarning()"
+             [class.critical]="durationCritical()">
+          <span class="duration-label">Duration:</span>
+          <span class="duration-time">{{ formattedDuration() }}</span>
+          @if (durationCritical()) {
+            <span class="duration-alert">⚠️ Stop recording! (40s limit)</span>
+          } @else if (durationWarning()) {
+            <span class="duration-warning">Approaching 40s limit</span>
+          }
+        </div>
+
+        <!-- Recording Controls -->
+        <div class="controls">
+          @if (!isRecording()) {
+            <button
+              class="btn btn-primary btn-large"
+              (click)="startRecording()"
+              [disabled]="isProcessing()">
+              <span class="btn-icon">🎤</span>
+              Start Recording
+            </button>
+          } @else {
+            <div class="recording-controls">
+              @if (!isPaused()) {
+                <button
+                  class="btn btn-warning"
+                  (click)="pauseRecording()">
+                  <span class="btn-icon">⏸️</span>
+                  Pause
+                </button>
+              } @else {
+                <button
+                  class="btn btn-success"
+                  (click)="resumeRecording()">
+                  <span class="btn-icon">▶️</span>
+                  Resume
+                </button>
+              }
+
+              <button
+                class="btn btn-danger"
+                (click)="stopRecording()">
+                <span class="btn-icon">⏹️</span>
+                Stop
+              </button>
+            </div>
+          }
+        </div>
+
+        <!-- Recording Status -->
+        @if (isRecording()) {
+          <div class="recording-status">
+            <span class="recording-indicator"></span>
+            @if (isPaused()) {
+              <span>Recording Paused</span>
+            } @else {
+              <span>Recording...</span>
+            }
+          </div>
+        }
+
+        <!-- Error Display -->
+        @if (recordingError()) {
+          <div class="alert alert-error">
+            {{ recordingError() }}
+          </div>
+        }
+      </div>
+
+      <!-- Settings -->
+      <div class="settings-card">
+        <h3>Settings</h3>
+
+        <div class="form-group">
+          <label for="language">Language</label>
+          <select
+            id="language"
+            class="form-select"
+            [value]="selectedLanguage()"
+            (change)="selectedLanguage.set($any($event.target).value)"
+            [disabled]="isProcessing()">
+            @for (lang of languages; track lang.code) {
+              <option [value]="lang.code">{{ lang.name }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="model">Model</label>
+          <select
+            id="model"
+            class="form-select"
+            [value]="selectedModel()"
+            (change)="selectedModel.set($any($event.target).value)"
+            [disabled]="isProcessing()">
+            @for (model of models; track model.code) {
+              <option [value]="model.code">{{ model.name }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="info-box">
+          <p><strong>Note:</strong> Audio must be under 40 seconds. The recording will automatically warn you as you approach this limit.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Transcription Section -->
+    <div class="transcription-section">
+      <!-- Action Buttons -->
+      <div class="action-buttons">
+        <button
+          class="btn btn-primary"
+          (click)="transcribe()"
+          [disabled]="!canTranscribe() || isTranscribing()">
+          @if (isTranscribing()) {
+            <span class="spinner"></span>
+            Transcribing...
+          } @else {
+            <span class="btn-icon">📝</span>
+            Transcribe
+          }
+        </button>
+
+        @if (transcription()) {
+          <button
+            class="btn btn-secondary"
+            (click)="copyTranscription()">
+            <span class="btn-icon">📋</span>
+            Copy
+          </button>
+        }
+
+        @if (canTranscribe() || transcription()) {
+          <button
+            class="btn btn-outline"
+            (click)="reset()"
+            [disabled]="isProcessing()">
+            <span class="btn-icon">🔄</span>
+            Reset
+          </button>
+        }
+      </div>
+
+      <!-- API Error -->
+      @if (apiError()) {
+        <div class="alert alert-error">
+          <strong>Error:</strong> {{ apiError() }}
+        </div>
+      }
+
+      <!-- Transcription Result -->
+      @if (transcription()) {
+        <div class="transcription-card">
+          <h3>Transcription Result</h3>
+          <div class="transcription-text">
+            {{ transcription() }}
+          </div>
+        </div>
+      } @else if (!isTranscribing()) {
+        <div class="placeholder-card">
+          <p>👆 Record audio and click "Transcribe" to see the result here</p>
+        </div>
+      }
+    </div>
+  </main>
+
+  <footer class="footer">
+    <p>Powered by Meta's Omnilingual ASR • Supporting 1,600+ Languages</p>
+  </footer>
+</div>
+
+<router-outlet />
