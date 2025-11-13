@@ -511,6 +511,42 @@ async def upload_chunk(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/transcribe/status/{session_id}")
+async def get_session_status(session_id: str):
+    """
+    Get transcription status for all chunks in session.
+
+    Returns all chunks with their current draft/final text and status.
+    """
+    try:
+        if session_id not in session_manager.sessions:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        chunks = session_manager.get_all_chunks(session_id)
+
+        # Format chunks for response
+        formatted_chunks = []
+        for chunk in chunks:
+            formatted_chunks.append({
+                "chunk_index": chunk["chunk_index"],
+                "status": chunk["status"],
+                "draft_text": chunk["draft_text"],
+                "final_text": chunk["final_text"],
+                "timestamp": chunk["timestamp"]
+            })
+
+        return {
+            "session_id": session_id,
+            "chunks": formatted_chunks
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Status retrieval error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/info")
 async def api_info():
     """Get detailed API information."""
