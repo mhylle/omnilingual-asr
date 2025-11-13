@@ -18,6 +18,7 @@ from pydub import AudioSegment
 
 from transcriber import Transcriber
 from config import settings
+from session_manager import SessionManager, ChunkStatus
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -45,6 +46,9 @@ if settings.cors_enabled:
 # Global transcriber instance (lazy loaded)
 _transcriber: Optional[Transcriber] = None
 _current_model: Optional[str] = None
+
+# Global session manager
+session_manager = SessionManager()
 
 
 def get_transcriber(model: str = settings.default_model) -> Transcriber:
@@ -450,6 +454,61 @@ async def transcribe_batch(
                             logger.info(f"Cleaned up: {path}")
                         except Exception as e:
                             logger.warning(f"Failed to cleanup {path}: {e}")
+
+
+@app.post("/api/transcribe/chunk")
+async def upload_chunk(
+    file: UploadFile = File(...),
+    session_id: Optional[str] = Form(None),
+    chunk_index: int = Form(...),
+    timestamp: float = Form(...)
+):
+    """
+    Upload audio chunk for transcription.
+
+    Creates new session if session_id not provided.
+    Saves audio file and queues for draft transcription.
+    """
+    try:
+        # Create or validate session
+        if session_id is None:
+            session_id = session_manager.create_session()
+        elif session_id not in session_manager.sessions:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        # Save audio file
+        upload_dir = Path("uploads")
+        upload_dir.mkdir(exist_ok=True)
+
+        audio_filename = f"{session_id}_chunk_{chunk_index}.wav"
+        audio_path = upload_dir / audio_filename
+
+        with audio_path.open("wb") as f:
+            content = await file.read()
+            f.write(content)
+
+        # Add chunk to session
+        chunk_id = session_manager.add_chunk(
+            session_id=session_id,
+            chunk_index=chunk_index,
+            audio_path=str(audio_path),
+            timestamp=timestamp
+        )
+
+        logger.info(f"Chunk uploaded: session={session_id}, chunk={chunk_id}")
+
+        # TODO: Queue for draft transcription (Task 4)
+
+        return {
+            "session_id": session_id,
+            "chunk_id": chunk_id,
+            "status": "pending",
+            "audio_path": str(audio_path)
+        }
+
+    except Exception as e:
+        logger.error(f"Chunk upload error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/info")
