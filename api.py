@@ -13,12 +13,14 @@ from pathlib import Path
 import tempfile
 import shutil
 import logging
+import asyncio
 from datetime import datetime
 from pydub import AudioSegment
 
 from transcriber import Transcriber
 from config import settings
 from session_manager import SessionManager, ChunkStatus
+from transcription_worker import DraftTranscriptionWorker
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -49,6 +51,9 @@ _current_model: Optional[str] = None
 
 # Global session manager
 session_manager = SessionManager()
+
+# Add draft worker
+draft_worker = DraftTranscriptionWorker(session_manager)
 
 
 def get_transcriber(model: str = settings.default_model) -> Transcriber:
@@ -497,7 +502,8 @@ async def upload_chunk(
 
         logger.info(f"Chunk uploaded: session={session_id}, chunk={chunk_id}")
 
-        # TODO: Queue for draft transcription (Task 4)
+        # Queue for draft transcription
+        asyncio.create_task(draft_worker.process_chunk(session_id, chunk_id))
 
         return {
             "session_id": session_id,
