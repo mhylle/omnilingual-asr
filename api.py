@@ -21,6 +21,7 @@ from transcriber import Transcriber
 from config import settings
 from session_manager import SessionManager, ChunkStatus
 from transcription_worker import DraftTranscriptionWorker
+from finalization_worker import FinalizationWorker
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -54,6 +55,9 @@ session_manager = SessionManager()
 
 # Add draft worker
 draft_worker = DraftTranscriptionWorker(session_manager)
+
+# Add finalization worker
+finalization_worker = FinalizationWorker(session_manager, merge_threshold=5)
 
 
 def get_transcriber(model: str = settings.default_model) -> Transcriber:
@@ -504,6 +508,9 @@ async def upload_chunk(
 
         # Queue for draft transcription
         asyncio.create_task(draft_worker.process_chunk(session_id, chunk_id))
+
+        # Check if ready for finalization
+        asyncio.create_task(finalization_worker.check_and_finalize(session_id))
 
         return {
             "session_id": session_id,
