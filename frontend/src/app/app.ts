@@ -74,11 +74,15 @@ export class App {
 
   // Available models
   readonly models = [
-    { code: 'ctc_1b', name: 'CTC 1B (Fast, Recommended)' },
     { code: 'ctc_300m', name: 'CTC 300M (Fastest)' },
+    { code: 'ctc_1b', name: 'CTC 1B (Fast, Recommended)' },
     { code: 'ctc_3b', name: 'CTC 3B (Better)' },
-    { code: 'llm_1b', name: 'LLM 1B (Language-aware)' },
-    { code: 'llm_3b', name: 'LLM 3B (Best)' },
+    { code: 'ctc_7b', name: 'CTC 7B (Best CTC)' },
+    { code: 'llm_300m', name: 'LLM 300M (Compact, Language-aware)' },
+    { code: 'llm_1b', name: 'LLM 1B (Balanced, Language-aware)' },
+    { code: 'llm_3b', name: 'LLM 3B (High-quality, Language-aware)' },
+    { code: 'llm_7b', name: 'LLM 7B (Best quality, ~17GB VRAM)' },
+    { code: 'llm_7b_zs', name: 'LLM 7B Zero-shot (Multilingual)' },
   ];
 
   async startRecording(): Promise<void> {

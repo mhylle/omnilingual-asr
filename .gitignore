@@ -85,3 +85,4 @@ tmp/
 # Documentation builds
 docs/_build/
 site/
+.playwright-mcp/
